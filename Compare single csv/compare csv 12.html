@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delta Engine Pro | Bulletproof</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #0f172a;
+            --radius: 16px;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 2rem auto;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 2rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+            margin-bottom: 2rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .file-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .drop-zone {
+            position: relative;
+            border: 2px dashed #cbd5e1;
+            padding: 2rem;
+            text-align: center;
+            border-radius: 12px;
+            background: #fafafa;
+            cursor: pointer;
+        }
+
+        .drop-zone input[type="file"] {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .btn-export {
+            background: #f1f5f9;
+            color: var(--primary);
+            padding: 6px 12px;
+            font-size: 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-weight: 700;
+            cursor: pointer;
+            width: auto;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+            max-height: 400px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+            margin-top: 10px;
+            background: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        th {
+            background: #f1f5f9;
+            padding: 12px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #f1f5f9;
+            white-space: nowrap;
+        }
+
+        .mismatch-tag {
+            background: #fef9c3;
+            color: #854d0e;
+            font-weight: 700;
+            padding: 2px 4px;
+            border-radius: 4px;
+            border: 1px solid #fde68a;
+        }
+
+        #overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.9);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="overlay">
+        <div class="spinner"></div>
+        <h3 id="loader-text" style="margin-top: 15px; color: var(--primary)">Processing...</h3>
+    </div>
+
+    <div class="container">
+        <div style="text-align:center; margin-bottom:2rem">
+            <h1 style="margin:0">Delta Engine</h1>
+            <p id="engine-status" style="color:var(--primary); font-weight:bold">⏳ Initializing Engine...</p>
+        </div>
+
+        <div class="card" id="main-card">
+            <div id="step-1">
+                <div class="file-grid">
+                    <div class="drop-zone">
+                        <input type="file" accept=".csv" onchange="loadFile(this, 1)">
+                        <i data-lucide="file-text"></i><br>
+                        <strong>Base File (A)</strong><br><span id="name-1"
+                            style="font-size:0.8rem; color:var(--primary)"></span>
+                    </div>
+                    <div class="drop-zone">
+                        <input type="file" accept=".csv" onchange="loadFile(this, 2)">
+                        <i data-lucide="file-plus"></i><br>
+                        <strong>New File (B)</strong><br><span id="name-2"
+                            style="font-size:0.8rem; color:var(--primary)"></span>
+                    </div>
+                </div>
+                <button id="btn-analyze" onclick="analyze()" disabled>Loading...</button>
+            </div>
+
+            <div id="step-2" class="hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <strong>Primary Keys:</strong>
+                    <span onclick="document.querySelectorAll('#keys input').forEach(i=>i.checked=true)"
+                        style="cursor:pointer; color:var(--primary); font-size:0.8rem; font-weight:bold">Select
+                        All</span>
+                </div>
+                <div id="keys"
+                    style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; padding:15px; background:#f1f5f9; border-radius:12px; margin:15px 0">
+                </div>
+                <button onclick="compare()">Run Comparison</button>
+            </div>
+        </div>
+
+        <div id="results" class="hidden card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem">
+                <h2 style="margin:0">Results Dashboard</h2>
+                <button onclick="location.reload()"
+                    style="width:auto; padding:8px 16px; background:#f1f5f9; border:none; color:#666; border-radius:8px; cursor:pointer">New
+                    Upload</button>
+            </div>
+
+            <div style="margin-top:20px">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <h3 style="color:#ef4444; margin:0">🔴 Removed Rows</h3>
+                    <div style="display:flex; gap:5px">
+                        <button class="btn-export" onclick="exportFile('del', 'csv')">CSV</button>
+                        <button class="btn-export" onclick="exportFile('del', 'xml')">XML</button>
+                        <button class="btn-export" onclick="exportFile('del', 'json')">JSON</button>
+                    </div>
+                </div>
+                <div id="out-del" class="table-wrap"></div>
+            </div>
+
+            <div style="margin-top:40px">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <h3 style="color:#10b981; margin:0">🟢 Added Rows</h3>
+                    <div style="display:flex; gap:5px">
+                        <button class="btn-export" onclick="exportFile('add', 'csv')">CSV</button>
+                        <button class="btn-export" onclick="exportFile('add', 'xml')">XML</button>
+                        <button class="btn-export" onclick="exportFile('add', 'json')">JSON</button>
+                    </div>
+                </div>
+                <div id="out-add" class="table-wrap"></div>
+            </div>
+
+            <div style="margin-top:40px">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <h3 style="color:#f59e0b; margin:0">🟡 Mismatches</h3>
+                    <div style="display:flex; gap:5px">
+                        <button class="btn-export" onclick="exportFile('mis', 'csv')">CSV</button>
+                        <button class="btn-export" onclick="exportFile('mis', 'xml')">XML</button>
+                        <button class="btn-export" onclick="exportFile('mis', 'json')">JSON</button>
+                    </div>
+                </div>
+                <div id="out-mis" class="table-wrap"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let py, file1, file2;
+
+        async function init() {
+            py = await loadPyodide();
+            await py.loadPackage("pandas");
+            document.getElementById('engine-status').innerText = "✅ Engine Ready";
+            document.getElementById('btn-analyze').disabled = false;
+            document.getElementById('btn-analyze').innerText = "Analyze Columns";
+            lucide.createIcons();
+        }
+        init();
+
+        function loadFile(input, idx) {
+            const f = input.files[0];
+            if (!f) return;
+            document.getElementById('name-' + idx).innerText = f.name;
+            const r = new FileReader();
+            r.onload = (e) => { if (idx === 1) file1 = e.target.result; else file2 = e.target.result; };
+            r.readAsText(f);
+        }
+
+        async function analyze() {
+            if (!file1 || !file2) return alert("Please select two files.");
+            py.globals.set("csv_a", file1);
+            py.globals.set("csv_b", file2);
+            const cols = await py.runPythonAsync(`
+                import pandas as pd, io
+                df1 = pd.read_csv(io.StringIO(csv_a)).fillna('').astype(str).apply(lambda x: x.str.strip())
+                df2 = pd.read_csv(io.StringIO(csv_b)).fillna('').astype(str).apply(lambda x: x.str.strip())
+                orig_cols = list(df1.columns)
+                [c for c in orig_cols if c in df2.columns]
+            `);
+            const box = document.getElementById('keys');
+            box.innerHTML = cols.toJs().map(c => `<label class="key-item"><input type="checkbox" value="${c}" checked> ${c}</label>`).join('');
+            document.getElementById('step-1').classList.add('hidden');
+            document.getElementById('step-2').classList.remove('hidden');
+        }
+
+        async function compare() {
+            document.getElementById('overlay').style.display = 'flex';
+            const k = Array.from(document.querySelectorAll('#keys input:checked')).map(i => i.value);
+            py.globals.set("k", py.toPy(k));
+
+            try {
+                const htmlResults = await py.runPythonAsync(`
+                    merged = df1.merge(df2, on=k, how='outer', indicator=True, suffixes=('_old', '_new'))
+                    
+                    def safe_df(df, target_cols):
+                        existing = [c for c in target_cols if c in df.columns]
+                        return df[existing]
+
+                    d_df = safe_df(merged[merged['_merge']=='left_only'], orig_cols)
+                    a_df = merged[merged['_merge']=='right_only'].rename(columns={c+'_new': c for c in df2.columns if c not in k})
+                    a_df = safe_df(a_df, list(df2.columns))
+                    
+                    both = merged[merged['_merge'] == 'both']
+                    others = [c for c in orig_cols if c not in k]
+                    mis_ui, mis_raw = [], []
+                    for _, r in both.iterrows():
+                        row_ui, row_raw, diff = {}, {}, False
+                        for c in others:
+                            v1, v2 = r.get(c+'_old', ''), r.get(c+'_new', '')
+                            if v1 != v2:
+                                row_ui[c] = f'<span class="mismatch-tag">{v1} → {v2}</span>'
+                                row_raw[c] = f"{v1} -> {v2}"; diff = True
+                            else: row_ui[c] = row_raw[c] = v1
+                        if diff:
+                            for kc in k: row_ui[kc] = row_raw[kc] = r[kc]
+                            mis_ui.append(row_ui); mis_raw.append(row_raw)
+                    
+                    m_df_ui = safe_df(pd.DataFrame(mis_ui), orig_cols) if mis_ui else pd.DataFrame()
+                    m_df_raw = safe_df(pd.DataFrame(mis_raw), orig_cols) if mis_raw else pd.DataFrame()
+
+                    # Put dataframes in global scope for later export
+                    res_d, res_a, res_m = d_df, a_df, m_df_raw
+                    
+                    (res_d.to_html(index=False), res_a.to_html(index=False), 
+                     m_df_ui.to_html(index=False, escape=False) if not m_df_ui.empty else "No mismatches.")
+                `);
+
+                const [d, a, m] = htmlResults.toJs();
+                document.getElementById('out-del').innerHTML = d;
+                document.getElementById('out-add').innerHTML = a;
+                document.getElementById('out-mis').innerHTML = m;
+                document.getElementById('results').classList.remove('hidden');
+                document.getElementById('main-card').classList.add('hidden');
+            } catch (e) {
+                alert("Error: " + e.message);
+            } finally {
+                document.getElementById('overlay').style.display = 'none';
+                lucide.createIcons();
+            }
+        }
+
+        async function exportFile(type, format) {
+            document.getElementById('overlay').style.display = 'flex';
+            document.getElementById('loader-text').innerText = `Generating ${format.toUpperCase()}...`;
+
+            try {
+                // Map the type to the correct global dataframe in Python
+                const dfName = { 'del': 'res_d', 'add': 'res_a', 'mis': 'res_m' }[type];
+
+                const data = await py.runPythonAsync(`
+                    df = ${dfName}
+                    if df.empty:
+                        ""
+                    elif "${format}" == "csv":
+                        df.to_csv(index=False)
+                    elif "${format}" == "json":
+                        df.to_json(orient='records')
+                    elif "${format}" == "xml":
+                        df.to_xml(index=False, parser='etree')
+                `);
+
+                if (!data) return alert("Nothing to export for this category.");
+
+                const blob = new Blob([data], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `delta_${type}.${format}`;
+                link.click();
+            } catch (e) {
+                alert("Export failed: " + e.message);
+            } finally {
+                document.getElementById('overlay').style.display = 'none';
+            }
+        }
+    </script>
+</body>
+
+</html>

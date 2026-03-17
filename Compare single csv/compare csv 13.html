@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delta Engine Pro | Excel</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --radius: 16px;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* High-Performance Loader */
+        #loader-overlay {
+            position: fixed;
+            inset: 0;
+            background: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            transition: opacity 0.5s ease;
+        }
+
+        .loading-bar-bg {
+            width: 250px;
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+
+        .loading-bar-fill {
+            width: 30%;
+            height: 100%;
+            background: var(--primary);
+            border-radius: 10px;
+            animation: progress 2s infinite ease-in-out;
+        }
+
+        @keyframes progress {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            100% {
+                transform: translateX(250%);
+            }
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 2rem auto;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 2.5rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+            margin-bottom: 2rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .file-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .drop-zone {
+            border: 2px dashed #cbd5e1;
+            padding: 2rem;
+            text-align: center;
+            border-radius: 12px;
+            background: #fafafa;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .drop-zone input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 5;
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        button:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+        }
+
+        .btn-xlsx {
+            background: #10b981;
+            color: white;
+            padding: 6px 14px;
+            font-size: 0.75rem;
+            border: none;
+            border-radius: 6px;
+            width: auto;
+            font-weight: 700;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+            max-height: 400px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            margin-top: 10px;
+            background: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        th {
+            background: #f8fafc;
+            padding: 12px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #f1f5f9;
+            white-space: nowrap;
+        }
+
+        .mismatch-tag {
+            background: #fef9c3;
+            color: #854d0e;
+            font-weight: 700;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="loader-overlay">
+        <h2 id="load-msg" style="margin:0; color:var(--primary); font-weight:800;">Delta Engine Pro</h2>
+        <p id="load-detail" style="color:#64748b; margin-top:5px; font-size:0.9rem;">Initializing WebAssembly...</p>
+        <div class="loading-bar-bg">
+            <div class="loading-bar-fill"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div style="text-align:center; margin-bottom:2rem">
+            <h1 style="margin:0; font-weight: 900; color:#1e293b;">Delta Engine</h1>
+            <p style="color:var(--primary); font-weight:600;">Browser-Based Data Analysis</p>
+        </div>
+
+        <div class="card" id="input-card">
+            <div id="step-1">
+                <div class="file-grid">
+                    <div class="drop-zone">
+                        <input type="file" accept=".csv" onchange="cacheFile(this, 1)">
+                        <i data-lucide="file-text"></i><br>
+                        <strong>Base File (A)</strong><br><span id="fn1"
+                            style="font-size:0.8rem; color:var(--primary)"></span>
+                    </div>
+                    <div class="drop-zone">
+                        <input type="file" accept=".csv" onchange="cacheFile(this, 2)">
+                        <i data-lucide="file-plus"></i><br>
+                        <strong>New File (B)</strong><br><span id="fn2"
+                            style="font-size:0.8rem; color:var(--primary)"></span>
+                    </div>
+                </div>
+                <button id="btn-analyze" onclick="analyze()">Analyze Structure</button>
+            </div>
+
+            <div id="step-2" class="hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <strong>Primary Keys:</strong>
+                    <span onclick="document.querySelectorAll('#keys input').forEach(i=>i.checked=true)"
+                        style="cursor:pointer; color:var(--primary); font-size:0.8rem; font-weight:bold">Select
+                        All</span>
+                </div>
+                <div id="keys"
+                    style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; padding:15px; background:#f1f5f9; border-radius:12px; margin:15px 0">
+                </div>
+                <button onclick="compare()">Run Excel Comparison</button>
+            </div>
+        </div>
+
+        <div id="results" class="hidden card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem">
+                <h2 style="margin:0">Analysis Results</h2>
+                <button onclick="location.reload()"
+                    style="width:auto; padding:8px 16px; background:#f1f5f9; color:#64748b; border:none; border-radius:8px; cursor:pointer;">New
+                    Task</button>
+            </div>
+
+            <div style="margin-top:20px">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <h3 style="color:#ef4444; margin:0; font-size:0.9rem;">🔴 REMOVED</h3>
+                    <button class="btn-xlsx" onclick="exportXlsx('del')">Export .xlsx</button>
+                </div>
+                <div id="out-del" class="table-wrap"></div>
+            </div>
+
+            <div style="margin-top:30px">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <h3 style="color:#10b981; margin:0; font-size:0.9rem;">🟢 ADDED</h3>
+                    <button class="btn-xlsx" onclick="exportXlsx('add')">Export .xlsx</button>
+                </div>
+                <div id="out-add" class="table-wrap"></div>
+            </div>
+
+            <div style="margin-top:30px">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <h3 style="color:#f59e0b; margin:0; font-size:0.9rem;">🟡 MISMATCHES</h3>
+                    <button class="btn-xlsx" onclick="exportXlsx('mis')">Export .xlsx</button>
+                </div>
+                <div id="out-mis" class="table-wrap"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let py, fileA, fileB;
+
+        // Optimized Staged Loading
+        async function startEngine() {
+            const detail = document.getElementById('load-detail');
+            try {
+                detail.innerText = "Downloading Python Runtime...";
+                py = await loadPyodide();
+
+                detail.innerText = "Installing Pandas & Data Tools...";
+                await py.loadPackage("pandas");
+
+                detail.innerText = "Installing Excel Engine (OpenPyXL)...";
+                await py.loadPackage("openpyxl");
+
+                // Fade out loader
+                const loader = document.getElementById('loader-overlay');
+                loader.style.opacity = '0';
+                setTimeout(() => loader.style.display = 'none', 500);
+
+                lucide.createIcons();
+            } catch (e) {
+                detail.innerText = "Error loading engine. Check connection.";
+                console.error(e);
+            }
+        }
+        startEngine();
+
+        function cacheFile(input, idx) {
+            const f = input.files[0];
+            if (!f) return;
+            document.getElementById('fn' + idx).innerText = f.name;
+            const r = new FileReader();
+            r.onload = (e) => { if (idx === 1) fileA = e.target.result; else fileB = e.target.result; };
+            r.readAsText(f);
+        }
+
+        async function analyze() {
+            if (!fileA || !fileB) return alert("Select both files");
+            py.globals.set("csv_a", fileA);
+            py.globals.set("csv_b", fileB);
+            const cols = await py.runPythonAsync(`
+                import pandas as pd, io
+                df1 = pd.read_csv(io.StringIO(csv_a)).fillna('').astype(str)
+                df2 = pd.read_csv(io.StringIO(csv_b)).fillna('').astype(str)
+                orig_cols = list(df1.columns)
+                [c for c in orig_cols if c in df2.columns]
+            `);
+            document.getElementById('keys').innerHTML = cols.toJs().map(c => `<label style="display:flex; align-items:center; gap:8px; background:white; padding:8px; border-radius:8px; border:1px solid #e2e8f0; font-size:0.85rem; cursor:pointer;"><input type="checkbox" value="${c}" checked> ${c}</label>`).join('');
+            document.getElementById('step-1').classList.add('hidden');
+            document.getElementById('step-2').classList.remove('hidden');
+        }
+
+        async function compare() {
+            const overlay = document.getElementById('loader-overlay');
+            const detail = document.getElementById('load-detail');
+            overlay.style.display = 'flex';
+            overlay.style.opacity = '1';
+            overlay.style.background = 'rgba(255,255,255,0.8)';
+            detail.innerText = "Computing Differences...";
+
+            const k = Array.from(document.querySelectorAll('#keys input:checked')).map(i => i.value);
+            py.globals.set("k", py.toPy(k));
+
+            setTimeout(async () => {
+                const res = await py.runPythonAsync(`
+                    merged = df1.merge(df2, on=k, how='outer', indicator=True, suffixes=('_old', '_new'))
+                    global res_del, res_add, res_mis
+                    res_del = merged[merged['_merge']=='left_only'][orig_cols]
+                    res_add = merged[merged['_merge']=='right_only'].rename(columns={c+'_new': c for c in df2.columns if c not in k})[list(df2.columns)]
+                    
+                    both = merged[merged['_merge'] == 'both']
+                    others = [c for c in orig_cols if c not in k]
+                    mis_ui, mis_raw = [], []
+                    for _, r in both.iterrows():
+                        row_ui, row_raw, diff = {}, {}, False
+                        for c in others:
+                            v1, v2 = r.get(c+'_old', ''), r.get(c+'_new', '')
+                            if v1 != v2:
+                                row_ui[c] = f'<span class="mismatch-tag">{v1} → {v2}</span>'
+                                row_raw[c] = f"{v1} >> {v2}"; diff = True
+                            else: row_ui[c] = row_raw[c] = v1
+                        if diff:
+                            for kc in k: row_ui[kc] = row_raw[kc] = r[kc]
+                            mis_ui.append(row_ui); mis_raw.append(row_raw)
+                    
+                    res_mis = pd.DataFrame(mis_raw)
+                    if not res_mis.empty: res_mis = res_mis[orig_cols]
+                    
+                    [res_del.to_html(index=False), res_add.to_html(index=False), 
+                     pd.DataFrame(mis_ui).to_html(index=False, escape=False) if mis_ui else "No mismatches."]
+                `);
+
+                const [d, a, m] = res.toJs();
+                document.getElementById('out-del').innerHTML = d;
+                document.getElementById('out-add').innerHTML = a;
+                document.getElementById('out-mis').innerHTML = m;
+                document.getElementById('results').classList.remove('hidden');
+                document.getElementById('input-card').classList.add('hidden');
+                overlay.style.display = 'none';
+            }, 100);
+        }
+
+        async function exportXlsx(type) {
+            const dfName = { 'del': 'res_del', 'add': 'res_add', 'mis': 'res_mis' }[type];
+            const buffer = await py.runPythonAsync(`
+                import io
+                df = ${dfName}
+                if df.empty: None
+                else:
+                    out = io.BytesIO()
+                    with pd.ExcelWriter(out, engine='openpyxl') as writer:
+                        df.to_excel(writer, index=False)
+                    out.getvalue()
+            `);
+            if (!buffer) return alert("Nothing to export.");
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `delta_${type}.xlsx`; a.click();
+        }
+    </script>
+</body>
+
+</html>

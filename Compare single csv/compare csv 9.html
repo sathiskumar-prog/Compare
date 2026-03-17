@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delta CSV | Premium Edition</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --muted: #64748b;
+            --danger: #ef4444;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --radius: 12px;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 2rem auto;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 8px;
+            color: #0f172a;
+        }
+
+        .header p {
+            color: var(--muted);
+        }
+
+        /* Status & Cards */
+        #status {
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-align: center;
+            color: var(--primary);
+            margin-bottom: 15px;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+            margin-bottom: 2rem;
+            transition: transform 0.2s;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Drop Zones */
+        .file-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .drop-zone {
+            border: 2px dashed #e2e8f0;
+            border-radius: var(--radius);
+            padding: 2rem;
+            text-align: center;
+            position: relative;
+            background: #fafafa;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .drop-zone:hover {
+            border-color: var(--primary);
+            background: #f5f7ff;
+        }
+
+        .drop-zone input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-name {
+            display: block;
+            margin-top: 10px;
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 0.85rem;
+        }
+
+        /* Key Selection */
+        .key-selector {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 10px;
+            margin: 1.5rem 0;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 12px;
+            background: #f1f5f9;
+            border-radius: 8px;
+        }
+
+        .key-item {
+            background: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Tables & Results */
+        .section-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 2rem;
+            font-weight: 800;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+            max-height: 400px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin-top: 10px;
+            background: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        th {
+            background: #f8fafc;
+            padding: 12px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            border-bottom: 2px solid #e2e8f0;
+            color: var(--muted);
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #f1f5f9;
+            white-space: nowrap;
+        }
+
+        /* Mismatch Highlighting */
+        .mismatch-pill {
+            background: #fef9c3;
+            color: #854d0e;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-family: monospace;
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            width: 100%;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Delta CSV</h1>
+            <p>Precise, privacy-focused data comparison.</p>
+        </div>
+
+        <div id="status">⏳ Initializing Engine...</div>
+
+        <div class="card">
+            <div id="step-1">
+                <div class="file-grid">
+                    <div class="drop-zone">
+                        <i data-lucide="file-up"></i>
+                        <span id="l1" style="display:block; margin-top:8px">Base File (A)</span>
+                        <span id="s1" class="file-name"></span>
+                        <input type="file" accept=".csv" onchange="cacheFile(this, 1)">
+                    </div>
+                    <div class="drop-zone">
+                        <i data-lucide="file-up"></i>
+                        <span id="l2" style="display:block; margin-top:8px">New File (B)</span>
+                        <span id="s2" class="file-name"></span>
+                        <input type="file" accept=".csv" onchange="cacheFile(this, 2)">
+                    </div>
+                </div>
+                <button id="btn-next" onclick="showKeys()" disabled>Analyze Files</button>
+            </div>
+
+            <div id="step-2" class="hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <strong style="font-size: 0.9rem;">Select Key Variables (Anchors)</strong>
+                    <button onclick="toggleAll(true)"
+                        style="width:auto; padding:4px 12px; background:#f1f5f9; color:var(--primary); font-size:0.75rem">Select
+                        All</button>
+                </div>
+                <div id="key-container" class="key-selector"></div>
+                <button onclick="runComparison()">Find Mismatches & Changes</button>
+            </div>
+        </div>
+
+        <div id="results" class="hidden">
+            <div class="card">
+                <h3 style="margin:0 0 1rem 0">Analysis Results</h3>
+
+                <div class="section-label" style="color:var(--danger)"><i data-lucide="minus-circle" size="16"></i>
+                    Removed from Base</div>
+                <div id="out-del" class="table-wrap"></div>
+
+                <div class="section-label" style="color:var(--success)"><i data-lucide="plus-circle" size="16"></i>
+                    Added in New</div>
+                <div id="out-add" class="table-wrap"></div>
+
+                <div class="section-label" style="color:var(--warning)"><i data-lucide="alert-circle" size="16"></i>
+                    Value Mismatches</div>
+                <div id="out-mis" class="table-wrap"></div>
+
+                <button onclick="location.reload()"
+                    style="margin-top:2rem; background: #f1f5f9; color: var(--muted);">Start New Comparison</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let py, fileCache = [null, null];
+
+        // Background loading
+        (async () => {
+            py = await loadPyodide();
+            await py.loadPackage("pandas");
+            document.getElementById('status').innerText = "✅ Engine Ready";
+            document.getElementById('btn-next').disabled = false;
+            lucide.createIcons();
+        })();
+
+        function cacheFile(input, idx) {
+            const file = input.files[0];
+            if (!file) return;
+            document.getElementById('s' + idx).innerText = file.name;
+            const reader = new FileReader();
+            reader.onload = (e) => fileCache[idx - 1] = e.target.result;
+            reader.readAsText(file);
+        }
+
+        async function showKeys() {
+            if (!fileCache[0] || !fileCache[1]) return alert("Select both files.");
+            py.globals.set("csv_a", fileCache[0]);
+            py.globals.set("csv_b", fileCache[1]);
+
+            const cols = await py.runPythonAsync(`
+                import pandas as pd, io
+                df_a = pd.read_csv(io.StringIO(csv_a)).dropna(how='all').fillna('').astype(str).apply(lambda x: x.str.strip())
+                df_b = pd.read_csv(io.StringIO(csv_b)).dropna(how='all').fillna('').astype(str).apply(lambda x: x.str.strip())
+                list(set(df_a.columns) & set(df_b.columns))
+            `);
+
+            document.getElementById('key-container').innerHTML = cols.toJs().map(c =>
+                `<label class="key-item"><input type="checkbox" value="${c}" checked> ${c}</label>`
+            ).join('');
+            document.getElementById('step-1').classList.add('hidden');
+            document.getElementById('step-2').classList.remove('hidden');
+        }
+
+        async function runComparison() {
+            const keys = Array.from(document.querySelectorAll('#key-container input:checked')).map(i => i.value);
+            if (keys.length === 0) return alert("Please select at least one key.");
+            py.globals.set("keys_list", py.toPy(keys));
+
+            const res = await py.runPythonAsync(`
+                merged = df_a.merge(df_b, on=keys_list, how='outer', indicator=True, suffixes=('_base', '_new'))
+                
+                # 1. Deletions and Additions
+                deleted = merged[merged['_merge'] == 'left_only'].drop(columns='_merge')
+                added = merged[merged['_merge'] == 'right_only'].drop(columns='_merge')
+                
+                # 2. Mismatches (Rows in both, but other columns differ)
+                both = merged[merged['_merge'] == 'both']
+                non_key_cols = [c for c in df_a.columns if c not in keys_list]
+                
+                mismatch_rows = []
+                for _, row in both.iterrows():
+                    row_diff = {}
+                    found_diff = False
+                    for c in non_key_cols:
+                        val_a, val_b = row[c+'_base'], row[c+'_new']
+                        if val_a != val_b:
+                            row_diff[c] = f'<span class="mismatch-pill">{val_a} → {val_b}</span>'
+                            found_diff = True
+                        else:
+                            row_diff[c] = val_a
+                    
+                    if found_diff:
+                        for k in keys_list: row_diff[k] = row[k]
+                        mismatch_rows.append(row_diff)
+                
+                mis_df = pd.DataFrame(mismatch_rows)
+                
+                (deleted.to_html(index=False), added.to_html(index=False), 
+                 mis_df.to_html(index=False, escape=False) if not mis_df.empty else "No mismatches found.")
+            `);
+
+            const [del, add, mis] = res.toJs();
+            document.getElementById('out-del').innerHTML = del || "No deletions.";
+            document.getElementById('out-add').innerHTML = add || "No additions.";
+            document.getElementById('out-mis').innerHTML = mis;
+            document.getElementById('results').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function toggleAll(v) { document.querySelectorAll('#key-container input').forEach(i => i.checked = v); }
+    </script>
+</body>
+
+</html>
